@@ -6,6 +6,19 @@ type Response struct {
 	Response json.RawMessage `json:"response"`
 }
 
+type SearchResult struct {
+	Hits []SearchHit `json:"hits"`
+}
+
+type SearchHit struct {
+	Type   string          `json:"type"`
+	Result json.RawMessage `json:"result"`
+}
+
+type SongResult struct {
+	Song SongFull `json:"song"`
+}
+
 type Song struct {
 	ID          int    `json:"id"`
 	Path        string `json:"path"`
@@ -19,13 +32,4 @@ type SongFull struct {
 	Description struct {
 		Plain string `json:"plain"`
 	} `json:"description"`
-}
-
-type SearchHit struct {
-	Type   string          `json:"type"`
-	Result json.RawMessage `json:"result"`
-}
-
-type SearchHits struct {
-	Hits []SearchHit `json:"hits"`
 }

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
@@ -16,6 +17,7 @@ import (
 type Client interface {
 	Initialize() error
 	Search(query string) ([]Song, error)
+	GetSong(id int) (*SongFull, error)
 }
 
 type client struct {
@@ -116,26 +118,14 @@ func (c *client) Search(query string) ([]Song, error) {
 	queryParams.Set("q", query)
 	url.RawQuery = queryParams.Encode()
 
-	req, err := http.NewRequest("GET", url.String(), nil)
+	req, err := c.createRequest("GET", url.String())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return nil, err
 	}
 
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
-
-	resp, err := c.httpClient.Do(req)
+	body, err := c.makeRequest(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("got error response: %d: %w", resp.StatusCode, err)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read body: %w", err)
+		return nil, err
 	}
 
 	var response Response
@@ -143,7 +133,7 @@ func (c *client) Search(query string) ([]Song, error) {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
-	var searchHits SearchHits
+	var searchHits SearchResult
 	if err := json.Unmarshal(response.Response, &searchHits); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal search hits: %w", err)
 	}
@@ -160,4 +150,72 @@ func (c *client) Search(query string) ([]Song, error) {
 	}
 
 	return songs, nil
+}
+
+func (c *client) GetSong(id int) (*SongFull, error) {
+	if c.accessToken == "" {
+		return nil, fmt.Errorf("client is not initialized")
+	}
+
+	urlStr, err := url.JoinPath(c.apiBaseURL, "songs", strconv.Itoa(id))
+	if err != nil {
+		return nil, fmt.Errorf("base url is malformed: %w", err)
+	}
+
+	url, _ := url.Parse(urlStr) // nolint: errcheck
+	queryParams := url.Query()
+	queryParams.Set("text_format", "plain")
+	url.RawQuery = queryParams.Encode()
+
+	req, err := c.createRequest("GET", url.String())
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := c.makeRequest(req)
+	if err != nil {
+		return nil, err
+	}
+
+	var response Response
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	var result SongResult
+	if err := json.Unmarshal(response.Response, &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal song full: %w", err)
+	}
+
+	return &result.Song, nil
+}
+
+func (c *client) createRequest(method, url string) (*http.Request, error) {
+	req, err := http.NewRequest(method, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", c.accessToken))
+
+	return req, nil
+}
+
+func (c *client) makeRequest(req *http.Request) ([]byte, error) {
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("got error response: %d: %w", resp.StatusCode, err)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read body: %w", err)
+	}
+
+	return body, nil
 }
