@@ -69,7 +69,11 @@ func (c *client) Initialize() error {
 
 	codeChan := make(chan string)
 
-	http.HandleFunc(callbackURL.Path, func(w http.ResponseWriter, r *http.Request) {
+	callbackPath := callbackURL.Path
+	if callbackPath == "" {
+		callbackPath = "/"
+	}
+	http.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Callback received")
 		code := r.URL.Query().Get("code")
 		if code == "" {
